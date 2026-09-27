@@ -27,16 +27,15 @@ describe('GET /poems/random', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
 
-  it('redirects to /500 when the API keeps failing', async () => {
+  it('renders the 500 page in place when the API keeps failing, so its retry link retries the random poem', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response('x', { status: 500 }))
     );
     const { GET } = await load();
     const response = await GET(fakeContext({ url: 'https://qafiyah.com/poems/random' }));
-    expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe('/500');
-    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('location')).toBeNull();
+    expect(await response.json()).toBe('/500');
   });
 
   it.each([
