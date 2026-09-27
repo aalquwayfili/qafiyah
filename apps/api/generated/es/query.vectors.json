@@ -42,6 +42,22 @@
                           "query": "حب"
                         }
                       }
+                    },
+                    {
+                      "match": {
+                        "title": {
+                          "operator": "and",
+                          "query": "حب"
+                        }
+                      }
+                    },
+                    {
+                      "match": {
+                        "content": {
+                          "operator": "and",
+                          "query": "حب"
+                        }
+                      }
                     }
                   ]
                 }
@@ -313,6 +329,22 @@
                       "match": {
                         "content.stemmed": {
                           "minimum_should_match": "1<75%",
+                          "query": "دمع"
+                        }
+                      }
+                    },
+                    {
+                      "match": {
+                        "title": {
+                          "operator": "and",
+                          "query": "دمع"
+                        }
+                      }
+                    },
+                    {
+                      "match": {
+                        "content": {
+                          "operator": "and",
                           "query": "دمع"
                         }
                       }

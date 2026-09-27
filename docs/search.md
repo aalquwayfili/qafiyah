@@ -55,8 +55,11 @@ asserted in the schema code. Both mappings are `dynamic: "strict"`.
 Membership and ranking are decided separately, which is the single most important thing to
 understand here:
 
-- **A filter gates recall.** A document is in the result set only if it matches `.stemmed` with
-  `minimum_should_match: "1<75%"` (one term must match; with more than one, 75% must).
+- **A filter gates recall.** A document is in the result set if it matches `.stemmed` with
+  `minimum_should_match: "1<75%"` (one term must match; with more than one, 75% must), or if it
+  matches every term on the normalized field. The second clause only matters when the stemmed
+  analyzer drops the whole query, as it does for one made only of Arabic stopwords such as `هذا` or
+  `من أنت`. For a query with any other word, a document holding every term already passes the first.
 - **Tiers only rank.** Every tier clause sits in `should`, so it can add score but never admits a
   document on its own.
 
