@@ -27,7 +27,7 @@ describe('GET /poems/random', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
 
-  it('renders the 500 page in place when the API keeps failing, so its retry link retries the random poem', async () => {
+  it('renders the 500 page in place when the API keeps failing', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response('x', { status: 500 }))
@@ -38,22 +38,33 @@ describe('GET /poems/random', () => {
     expect(await response.json()).toBe('/500');
   });
 
-  it.each([
-    ['retries a failed response body and redirects to the poem', 1, 2, '/poems/abcd'],
-    ['redirects to /500 after all response bodies fail', 3, 3, '/500'],
-  ] as const)('%s', async (_description, failures, attempts, location) => {
-    let calls = 0;
-    const fetch = vi.fn(async () => {
-      calls++;
-      if (calls > failures) return new Response('abcd');
-      return failedBody(new TypeError('Connection closed'));
-    });
+  it('retries a failed response body and redirects to the poem', async () => {
+    const fetch = fetchWithFailedBodies(1);
     vi.stubGlobal('fetch', fetch);
     const { GET } = await load();
     const response = await GET(fakeContext({ url: 'https://qafiyah.com/poems/random' }));
     expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe(location);
+    expect(response.headers.get('location')).toBe('/poems/abcd');
     expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(fetch).toHaveBeenCalledTimes(attempts);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders the 500 page in place after all response bodies fail', async () => {
+    const fetch = fetchWithFailedBodies(3);
+    vi.stubGlobal('fetch', fetch);
+    const { GET } = await load();
+    const response = await GET(fakeContext({ url: 'https://qafiyah.com/poems/random' }));
+    expect(response.headers.get('location')).toBeNull();
+    expect(await response.json()).toBe('/500');
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 });
+
+function fetchWithFailedBodies(failures: number) {
+  let calls = 0;
+  return vi.fn(async () => {
+    calls++;
+    if (calls > failures) return new Response('abcd');
+    return failedBody(new TypeError('Connection closed'));
+  });
+}
