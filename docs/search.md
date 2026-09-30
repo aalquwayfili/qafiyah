@@ -32,8 +32,12 @@ original while matching happens against the stripped form.
 ### In Elasticsearch
 
 One shared char filter, `arabic_letter_folding`, normalizes the letter variants that make Arabic
-search frustrating: `أ إ آ ٱ` to `ا`, `ى` to `ي`, `ة` to `ه`, `ؤ` to `و`, `ئ` to `ي`, and deletes
-`ء` and the tatweel `ـ`. A search for `احمد` finds `أحمد`.
+search frustrating: `أ إ آ ٱ` to `ا`, `ى` to `ي`, `ة` to `ه`, `ؤ` to `و`, `ئ` to `ي`, the Persian
+`ی` to `ي` and `ک` to `ك`, and deletes `ء`, the tatweel `ـ`, and the dagger alef. A search for `احمد`
+finds `أحمد`, and one for `الرحمن` finds `الرحمٰن`. It also deletes the invisible format characters
+that pasted text carries (zero-width spaces and joiners, direction marks, the byte order mark, the
+soft hyphen): the tokenizer drops them at the edge of a word, but inside one they split it or stay
+in the token.
 
 Three analyzers build on it, all with the `standard` tokenizer:
 
@@ -59,10 +63,9 @@ understand here:
   `minimum_should_match: "1<75%"` (one term must match; with more than one, 75% must), or if it
   matches every term on the normalized field. The second clause matters when the stemmed analyzer
   drops the whole query, as it does for one made only of Arabic stopwords such as `هذا` or `من أنت`.
-  It also matters for a stopword typed with diacritics, such as `هَذا` or `مِن`: the stop filter runs
-  before normalization, so the query keeps that word on `.stemmed`, while unvocalized poems lost it
-  at index time and now pass only through the normalized field. For any other query, a document
-  holding every term already passes the first clause.
+  The stop filter runs after `arabic_normalization`, so a stopword typed with diacritics, such as
+  `هَذا`, is dropped too. For any other query, a document holding every term already passes the first
+  clause.
 - **Tiers only rank.** Every tier clause sits in `should`, so it can add score but never admits a
   document on its own.
 
@@ -80,11 +83,22 @@ Poem tiers, final boost = tier boost times field weight (`title: 4`, `content: 1
 The powers-of-two spacing is wide on purpose: an exact title hit cannot be outscored by an
 accumulation of weak content matches.
 
+A ranked poem search with no era filter then multiplies the score of a poem from a classical era
+(jahili through mamluki, `CLASSICAL_ERA_SLUGS`) by `CLASSICAL_ERA_WEIGHT` (1.1) in a
+`function_score`, and leaves every other poem's score unchanged, so a classical poem passes a later
+one only when its score was already within about 9% of it. It never changes which poems match. A
+search with an era filter, the empty-`q` browse and `exact=true` are not boosted. The list is the
+same eight eras as the related-poems pool (`tmp_pool` in
+`scripts/db/sql/refresh-poem-relations.sql`); change both together.
+
 Poets use a flatter, independent ladder over the name and the nickname: exact 12 (name only),
 phrase 6, stemmed 3, prefix/autocomplete 2, fuzzy 1 (`fuzziness: AUTO`, name only). As with poems,
-a filter decides membership and the ladder only ranks: a `cross_fields` match with `operator: and`
-admits a poet only when every query term matches the name or the nickname as a prefix or a stem, so
-a query that isn't about a poet lists none. Terms the analyzers drop, like punctuation, don't count.
+a filter decides membership and the ladder only ranks. The filter, a `cross_fields` match with
+`operator: and`, admits a poet when every query word matches the name or the nickname as a stem, or
+every word matches as a prefix, so a query that isn't about a poet lists none. Elasticsearch groups
+`cross_fields` fields by analyzer, which is why the two readings don't mix. Prefixes start at two
+letters, so a trailing one-letter word (`نزار ق`) admits no one, and words the analyzers drop, like
+punctuation, are ignored.
 
 ## Poems and poets are queried separately
 
@@ -123,8 +137,7 @@ With no highlight, it falls back to the opening verse. An unclosed `<mark>` scor
 
 ## What search deliberately does not do
 
-Worth stating so nobody goes looking: no synonyms, no recency decay or `function_score`, no
-cross-index score normalization, and no `search_as_you_type` field (the edge-ngram is
-hand-rolled). Fuzziness only ranks poets that the filter already admitted, so a typo in a word
-still hides the poet, and it never applies to poems. Poet highlighting is
-supported by the query builder but switched off in `/search`.
+Worth stating so nobody goes looking: no synonyms, no recency decay, no cross-index score
+normalization, and no `search_as_you_type` field (the edge-ngram is hand-rolled). Fuzziness only
+ranks poets that the filter already admitted, so a typo in a word still hides the poet, and it never
+applies to poems. Poet highlighting is supported by the query builder but switched off in `/search`.
